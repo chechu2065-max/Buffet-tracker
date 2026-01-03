@@ -42,4 +42,5 @@ def ejecutar():
         print(f"Error: {e}")
 
 if __name__ == "__main__":
+    enviar("Prueba de conexión desde GitHub")
     ejecutar()
