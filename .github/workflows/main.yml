@@ -1,33 +1,33 @@
-name: BotInversor7Sabios
+name: Whale Terminal Pro Update
+
+# Configuración de cuándo se ejecuta
 on:
   schedule:
-    - cron: '0 9 * * *' # Se ejecuta a las 9 AM UTC
-  workflow_dispatch: # Permite que tú le des al botón de "Ejecutar ahora"
+    - cron: '0 9 * * 1' # Se ejecuta todos los lunes a las 09:00 AM UTC
+  workflow_dispatch:     # Esto permite que tú lo ejecutes manualmente cuando quieras
 
 jobs:
-  run-bot:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Permiso crucial para que el bot guarde sus archivos de memoria
+
     steps:
-      - name: Checkout código
+      - name: Checkout del código
         uses: actions/checkout@v3
-      
+
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      
-      - name: Instalar dependencias
-        run: pip install requests beautifulsoup4
-      
-      - name: Ejecutar Bot
-        run: python bot.py
-      
-      - name: Guardar estados de carteras
+
+      - name: Instalar librerías
         run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-          git add *.txt
-          git commit -m "Actualización diaria de carteras" || exit 0
-          git push
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ejecutar Whale Bot
+        env:
+          # Aquí conectamos los secretos de GitHub con el código
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python bot.py
+
