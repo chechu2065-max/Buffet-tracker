@@ -1,85 +1,86 @@
+import os
+import telebot
 import requests
 from bs4 import BeautifulSoup
-import os
 import time
-from collections import defaultdict
 
-TOKEN = "8271951374:AAGsrKVoHFttCEQXb0_fagtCwfJPzuQHXeQ"
-CHAT_ID = "1045927607"
+# --- CONFIGURACIÓN DE IDENTIDAD ---
+# Usa secretos de GitHub para el TOKEN y tu CHAT_ID
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-INVERSORES = {
-    "JIM SIMONS (RT)": "RT",
-    "LI LU (CP)": "CP",
-    "CHASE COLEMAN (TG)": "TG",
-    "DAVID TEPPER (LAL)": "LAL",
-    "WARREN BUFFETT (BRK)": "BRK",
-    "DRUCKENMILLER (Duquesne)": "Duquesne",
-    "BILL ACKMAN (PSH)": "PSH"
+bot = telebot.TeleBot(TOKEN)
+
+# --- TUS 7 SABIOS ---
+SABIOS = {
+    "JIM SIMONS (RT)": "renaissance-technologies-llc",
+    "LI LU (CP)": "himalaya-capital-management-llc",
+    "CHASE COLEMAN (TG)": "tiger-global-management-llc",
+    "DAVID TEPPER (LAL)": "appaloosa-management-lp",
+    "WARREN BUFFETT (BRK)": "berkshire-hathaway-inc",
+    "DRUCKENMILLER (Duquesne)": "duquesne-family-office-llc",
+    "BILL ACKMAN (PSH)": "pershing-square-capital-management-l-p"
 }
 
-def enviar_telegram(mensaje):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+def obtener_datos_ww(id_whale):
+    """Scraping de WhaleWisdom para obtener el Top 10"""
+    url = f"https://whalewisdom.com/filer/{id_whale}"
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        # Timeout corto para que no se quede colgado
-        requests.post(url, data={'chat_id': CHAT_ID, 'text': mensaje, 'parse_mode': 'Markdown'}, timeout=10)
-    except:
-        print("Error al enviar a Telegram")
-
-def ejecutar_bot():
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    consenso = defaultdict(list)
-    reporte_cambios = ""
-    hubo_cambios_totales = False
-
-    for nombre, id_dataroma in INVERSORES.items():
-        print(f"Rastreando a {nombre}...")
-        url = f"https://www.dataroma.com/m/holdings.php?m={id_dataroma}"
-        try:
-            # Timeout de 10 segundos para no bloquear el bot
-            r = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(r.text, 'html.parser')
-            tabla = soup.find('table', id='grid')
-            
-            if not tabla: 
-                print(f"Tabla no encontrada para {nombre}")
-                continue
-
-            posiciones_actuales = []
-            for fila in tabla.find_all('tr')[1:11]: # Reducimos a Top 10 para ir más rápido
-                cols = fila.find_all('td')
-                if len(cols) >= 5:
-                    ticker = cols[1].get_text(strip=True)
-                    cambio = cols[4].get_text(strip=True)
-                    consenso[ticker].append(nombre)
-                    icono = "🟢" if ("New" in cambio or "+" in cambio) else "🔴" if "-" in cambio else "⚪"
-                    posiciones_actuales.append(f"{icono} {ticker} ({cambio})")
-
-            estado_actual = "|".join(posiciones_actuales)
-            archivo_estado = f"estado_{id_dataroma}.txt"
-            
-            if not os.path.exists(archivo_estado) or open(archivo_estado, "r").read() != estado_actual:
-                hubo_cambios_totales = True
-                with open(archivo_estado, "w") as f: f.write(estado_actual)
-                reporte_cambios += f"🏛️ *{nombre}*\n" + "\n".join(posiciones_actuales[:5]) + "\n\n"
-
-            time.sleep(2) # Pausa de seguridad para evitar bloqueos
-
-        except Exception as e:
-            print(f"Error con {nombre}: {e}")
-
-    if hubo_cambios_totales:
-        enviar_telegram("🚀 **NUEVOS MOVIMIENTOS**")
-        enviar_telegram(reporte_cambios)
+        response = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        tabla = soup.find('table', {'id': 'current_holdings_table'})
+        filas = tabla.find_all('tr')[1:11]
         
-        # Lógica de Consenso (Simplificada para velocidad)
-        msg_c = "🤝 *CONSENSO*\n"
-        hay_c = False
-        for t, fans in consenso.items():
-            if len(fans) >= 2:
-                hay_c = True
-                msg_c += f"💎 *{t}* ({', '.join(fans)})\n"
-        if hay_c: enviar_telegram(msg_c)
+        datos = []
+        for f in filas:
+            cols = f.find_all('td')
+            if len(cols) > 5:
+                datos.append({
+                    'ticker': cols[1].text.strip(),
+                    'var': cols[4].text.strip(),
+                    'peso': cols[5].text.strip()
+                })
+        return datos
+    except Exception as e:
+        print(f"Error en {id_whale}: {e}")
+        return None
+
+def generar_reporte_total():
+    """Genera el mensaje de consenso y detalle para los 7 sabios"""
+    reporte_completo = "🐋 **WHALE TERMINAL PRO**\n"
+    reporte_completo += f"📅 {time.strftime('%d/%m/%Y')}\n"
+    reporte_completo += "—" * 10 + "\n\n"
+    
+    conteo_consenso = {}
+
+    for nombre, id_ww in SABIOS.items():
+        holdings = obtener_datos_ww(id_ww)
+        if holdings:
+            reporte_completo += f"🧙 **{nombre}**\n"
+            for h in holdings:
+                emoji = "🟢" if "+" in h['var'] or "New" in h['var'] else "🔴" if "-" in h['var'] else "⚪"
+                reporte_completo += f"{emoji} {h['ticker']} ({h['peso']})\n"
+                
+                # Lógica de Consenso
+                conteo_consenso[h['ticker']] = conteo_consenso.get(h['ticker'], 0) + 1
+            reporte_completo += "\n"
+
+    # Sección de Consenso
+    reporte_completo += "🤝 **CONSENSO DETECTADO**\n"
+    hay_consenso = False
+    for ticker, num in conteo_consenso.items():
+        if num >= 2:
+            reporte_completo += f"💎 {ticker}: Coinciden {num} sabios\n"
+            hay_consenso = True
+    
+    if not hay_consenso:
+        reporte_completo += "Sin coincidencias esta semana.\n"
+        
+    return reporte_completo
 
 if __name__ == "__main__":
-    ejecutar_bot()
-                    
+    # Si se ejecuta manualmente o por GitHub Actions
+    mensaje = generar_reporte_total()
+    bot.send_message(CHAT_ID, mensaje, parse_mode="Markdown")
+
